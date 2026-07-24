@@ -102,6 +102,8 @@ async def save_settings(payload: dict):
         session.last_recommendation_url = str(payload.get("recommendation_url") or "")
     if payload.get("recommendation_keyword") is not None:
         session.recommendation_keyword = str(payload.get("recommendation_keyword") or "")
+    if payload.get("recommendation_exclude_keywords") is not None:
+        session.recommendation_exclude_keywords = str(payload.get("recommendation_exclude_keywords") or "")
     if payload.get("pages") is not None:
         session.pages = max(1, min(int(payload.get("pages") or 1), 50))
     if payload.get("delay_seconds") is not None:
@@ -135,10 +137,12 @@ async def recommendations_preview(payload: dict):
         raise HTTPException(status_code=400, detail="Сначала выберите резюме")
     search_url = str(payload.get("recommendation_url") or payload.get("search_url") or "").strip()
     keyword = str(payload.get("recommendation_keyword") or "").strip()
+    exclude_keywords = str(payload.get("recommendation_exclude_keywords") or "").strip()
     pages = int(payload.get("pages") or 1)
-    result = preview_search(session, search_url, pages, title_keyword=keyword)
+    result = preview_search(session, search_url, pages, title_keyword=keyword, exclude_title_keywords=exclude_keywords)
     session.last_recommendation_url = search_url
     session.recommendation_keyword = keyword
+    session.recommendation_exclude_keywords = exclude_keywords
     session.pages = pages
     save_session(session)
     return {"ok": True, **result}

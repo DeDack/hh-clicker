@@ -78,10 +78,26 @@ def _title_matches_keyword(title: str, keyword: str) -> bool:
     return keyword in title.casefold()
 
 
-def preview_search(session: SessionData, search_url: str, pages: int, title_keyword: str = "") -> dict:
+def _split_keywords(raw: str) -> list[str]:
+    return [part.strip().casefold() for part in (raw or "").split(",") if part.strip()]
+
+
+def _title_has_any_keyword(title: str, keywords: list[str]) -> bool:
+    folded = title.casefold()
+    return any(keyword in folded for keyword in keywords)
+
+
+def preview_search(
+    session: SessionData,
+    search_url: str,
+    pages: int,
+    title_keyword: str = "",
+    exclude_title_keywords: str = "",
+) -> dict:
     search_url = validate_search_url(search_url)
     pages = max(1, min(int(pages or 1), 50))
     title_keyword = (title_keyword or "").strip()
+    exclude_keywords = _split_keywords(exclude_title_keywords)
     headers = {
         "User-Agent": session.headers.get("User-Agent") or "Mozilla/5.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -93,6 +109,7 @@ def preview_search(session: SessionData, search_url: str, pages: int, title_keyw
     duplicate_count = 0
     duplicate_examples = []
     filtered_by_title = 0
+    excluded_by_title = 0
     for page in range(pages):
         page_url = build_page_url(search_url, page, items_on_page=20)
         response = HH.get(page_url, headers=headers, cookies=session.cookies, timeout=20)
@@ -103,6 +120,9 @@ def preview_search(session: SessionData, search_url: str, pages: int, title_keyw
         for vacancy in vacancies:
             if not _title_matches_keyword(vacancy.title, title_keyword):
                 filtered_by_title += 1
+                continue
+            if _title_has_any_keyword(vacancy.title, exclude_keywords):
+                excluded_by_title += 1
                 continue
             if vacancy.id in seen:
                 duplicate_count += 1
@@ -127,7 +147,9 @@ def preview_search(session: SessionData, search_url: str, pages: int, title_keyw
         "duplicate_count": duplicate_count,
         "duplicate_examples": duplicate_examples,
         "title_keyword": title_keyword,
+        "exclude_title_keywords": exclude_keywords,
         "filtered_by_title": filtered_by_title,
+        "excluded_by_title": excluded_by_title,
         "diagnostics": diagnostics,
     }
     snapshot_id = SNAPSHOTS.create(search_url, session.selected_resume_hash, all_vacancies, metadata)

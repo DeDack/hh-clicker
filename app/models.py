@@ -73,6 +73,7 @@ class SessionData:
     last_search_url: str = ""
     last_recommendation_url: str = ""
     recommendation_keyword: str = ""
+    recommendation_exclude_keywords: str = ""
     pages: int = 1
     delay_seconds: float = 1.0
 
@@ -86,6 +87,7 @@ class SessionData:
             "last_search_url": self.last_search_url,
             "last_recommendation_url": self.last_recommendation_url,
             "recommendation_keyword": self.recommendation_keyword,
+            "recommendation_exclude_keywords": self.recommendation_exclude_keywords,
             "pages": self.pages,
             "delay_seconds": self.delay_seconds,
         }

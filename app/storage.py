@@ -48,6 +48,7 @@ def load_session() -> SessionData:
         last_search_url=str(data.get("last_search_url") or ""),
         last_recommendation_url=str(data.get("last_recommendation_url") or ""),
         recommendation_keyword=str(data.get("recommendation_keyword") or ""),
+        recommendation_exclude_keywords=str(data.get("recommendation_exclude_keywords") or ""),
         pages=int(data.get("pages") or 1),
         delay_seconds=float(data.get("delay_seconds") or 1.0),
     )
@@ -67,6 +68,7 @@ def save_session(session: SessionData) -> None:
             "last_search_url": session.last_search_url,
             "last_recommendation_url": session.last_recommendation_url,
             "recommendation_keyword": session.recommendation_keyword,
+            "recommendation_exclude_keywords": session.recommendation_exclude_keywords,
             "pages": session.pages,
             "delay_seconds": session.delay_seconds,
         })

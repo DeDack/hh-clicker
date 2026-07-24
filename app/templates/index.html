@@ -104,6 +104,11 @@
         <label>Ключевое слово в названии
           <input id="recommendationKeyword" placeholder="java">
         </label>
+        <label>Удалять вакансии со словами
+          <input id="recommendationExcludeKeywords" placeholder="qa, junior">
+        </label>
+      </div>
+      <div class="row" style="margin-top:8px">
         <div>
           <label>Действие</label>
           <button onclick="previewRecommendations()">Проверить рекомендации</button>
@@ -159,7 +164,7 @@ let previewLocked = false;
 const dirtyFields = new Set();
 
 function bindDirtyFields() {
-  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'pages', 'delay'].forEach(id => {
+  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'recommendationExcludeKeywords', 'pages', 'delay'].forEach(id => {
     const el = document.getElementById(id);
     if (el && !el.dataset.dirtyBound) {
       el.dataset.dirtyBound = '1';
@@ -200,8 +205,9 @@ function renderPreview(data) {
   const unique = Number(data.count || previewVacancies.length || 0);
   const duplicates = Number(data.duplicate_count || 0);
   const filtered = Number(data.filtered_by_title || 0);
+  const excluded = Number(data.excluded_by_title || 0);
   document.getElementById('previewExplain').textContent = cards
-    ? `HH отдал ${cards} карточек. В snapshot попало ${unique} уникальных vacancy ID; ${duplicates} дублей отброшено; ${filtered} отфильтровано по названию.`
+    ? `HH отдал ${cards} карточек. В snapshot попало ${unique} уникальных vacancy ID; ${duplicates} дублей отброшено; ${filtered} не прошли обязательное слово; ${excluded} удалено по исключениям.`
     : '';
   document.getElementById('previewDiag').innerHTML = (data.diagnostics || []).map(d =>
     `<span>p${d.page}: ${d.cards}/${d.accepted}</span>`
@@ -226,6 +232,7 @@ function renderSession(session) {
   setFieldFromServer('searchUrl', session?.last_search_url || '');
   setFieldFromServer('recommendationUrl', session?.last_recommendation_url || '');
   setFieldFromServer('recommendationKeyword', session?.recommendation_keyword || '');
+  setFieldFromServer('recommendationExcludeKeywords', session?.recommendation_exclude_keywords || '');
   setFieldFromServer('pages', session?.pages || 1);
   setFieldFromServer('delay', session?.delay_seconds ?? 1);
   const sel = document.getElementById('resumeSelect');
@@ -295,10 +302,11 @@ async function saveSettings() {
     search_url: document.getElementById('searchUrl').value,
     recommendation_url: document.getElementById('recommendationUrl').value,
     recommendation_keyword: document.getElementById('recommendationKeyword').value,
+    recommendation_exclude_keywords: document.getElementById('recommendationExcludeKeywords').value,
     pages: Number(document.getElementById('pages').value || 1),
     delay_seconds: Number(document.getElementById('delay').value || 0),
   })});
-  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'pages', 'delay'].forEach(id => dirtyFields.delete(id));
+  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'recommendationExcludeKeywords', 'pages', 'delay'].forEach(id => dirtyFields.delete(id));
 }
 
 async function previewSearch() {
@@ -328,11 +336,12 @@ async function previewRecommendations() {
     const data = await api('/api/search/recommendations/preview', {method:'POST', body: JSON.stringify({
       recommendation_url: document.getElementById('recommendationUrl').value,
       recommendation_keyword: document.getElementById('recommendationKeyword').value,
+      recommendation_exclude_keywords: document.getElementById('recommendationExcludeKeywords').value,
       pages: Number(document.getElementById('pages').value || 1),
     })});
     renderPreview(data);
     const keyword = data.title_keyword ? `; фильтр: ${data.title_keyword}` : '';
-    st.textContent = `Готово: ${data.count}; карточек HH: ${data.cards_total}; отфильтровано: ${data.filtered_by_title}${keyword}`;
+    st.textContent = `Готово: ${data.count}; карточек HH: ${data.cards_total}; не прошли фильтр: ${data.filtered_by_title}; удалено: ${data.excluded_by_title}${keyword}`;
     st.className = 'ok';
   } catch (e) {
     st.textContent = e.message;

@@ -194,6 +194,32 @@ def test_preview_can_filter_by_title_keyword(monkeypatch):
     assert [v["id"] for v in result["vacancies"]] == ["111", "333"]
 
 
+def test_preview_can_exclude_title_keywords(monkeypatch):
+    def fake_get(url, **kwargs):
+        return FakeResponse("""
+        <div data-qa="vacancy-serp__results">
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/111">Java developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/222">Junior Java developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/333">QA automation Java</a></div>
+        </div>
+        """)
+
+    monkeypatch.setattr("app.search_service.HH.get", fake_get)
+    session = SessionData(cookies={"hhtoken": "h"}, headers={}, selected_resume_hash="resume-preview")
+    result = preview_search(
+        session,
+        "https://kazan.hh.ru/search/vacancy?resume=abc",
+        1,
+        title_keyword="java",
+        exclude_title_keywords="qa, junior",
+    )
+    assert result["count"] == 1
+    assert result["filtered_by_title"] == 0
+    assert result["excluded_by_title"] == 2
+    assert result["exclude_title_keywords"] == ["qa", "junior"]
+    assert [v["id"] for v in result["vacancies"]] == ["111"]
+
+
 def test_start_rejects_unknown_snapshot_id():
     client = TestClient(app)
     response = client.post("/api/run/start", json={"snapshot_id": "missing"})
