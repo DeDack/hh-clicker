@@ -4,11 +4,16 @@ import os
 
 from fastapi import FastAPI
 
-from app.routes import router
+from app.routes import COVER_LETTERS, router
 
 
 app = FastAPI(title="HH Clicker Clean")
 app.include_router(router)
+
+
+@app.on_event("shutdown")
+async def shutdown_llm_client() -> None:
+    await COVER_LETTERS.aclose()
 
 
 def host() -> str:

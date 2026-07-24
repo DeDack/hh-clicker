@@ -5,9 +5,10 @@ import re
 import threading
 import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 
 from app.hh_client import HH
-from app.models import SearchVacancy, SessionData
+from app.models import CoverLetterResult, SearchVacancy, SessionData
 from app.search_parser import build_page_url, parse_search_vacancies, validate_search_url
 
 
@@ -20,10 +21,36 @@ class SnapshotStore:
         seed = f"{time.time()}:{resume_hash}:{search_url}:{len(vacancies)}".encode("utf-8")
         snapshot_id = hashlib.sha256(seed).hexdigest()[:16]
         with self._lock:
+            cover_letters = {
+                v.id: {
+                    "vacancyId": v.id,
+                    "vacancyTitle": v.title,
+                    "companyName": "",
+                    "vacancyUrl": v.url,
+                    "vacancyDescriptionHash": "",
+                    "resumeId": resume_hash,
+                    "resumeHash": "",
+                    "matchAnalysis": {},
+                    "coverLetter": "",
+                    "coverLetterStatus": "PENDING",
+                    "coverLetterGeneratedAt": "",
+                    "coverLetterEditedManually": False,
+                    "generationProvider": "",
+                    "generationModel": "",
+                    "promptVersion": "",
+                    "generationAttempts": 0,
+                    "generationError": None,
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "estimatedCost": 0.0,
+                }
+                for v in vacancies
+            }
             self._snapshots[snapshot_id] = {
                 "search_url": search_url,
                 "resume_hash": resume_hash,
                 "vacancies": list(vacancies),
+                "cover_letters": cover_letters,
                 "created_at": time.time(),
                 "locked": False,
                 "metadata": dict(metadata or {}),
@@ -46,14 +73,95 @@ class SnapshotStore:
             snap["vacancies"] = [v for v in snap["vacancies"] if v.id != vacancy_id]
             if len(snap["vacancies"]) == before:
                 raise ValueError("unknown vacancy_id")
+            snap.setdefault("cover_letters", {}).pop(vacancy_id, None)
         return self.public(snapshot_id)
+
+    def set_cover_letter_status(self, snapshot_id: str, vacancy_id: str, status: str, error: str | None = None) -> None:
+        with self._lock:
+            entry = self._entry(snapshot_id, vacancy_id)
+            entry["coverLetterStatus"] = status
+            if error is not None:
+                entry["generationError"] = error
+
+    def save_cover_letter_result(
+        self,
+        snapshot_id: str,
+        vacancy_id: str,
+        result: CoverLetterResult,
+        vacancy_title: str,
+        company_name: str,
+        vacancy_description_hash: str,
+        resume_hash: str,
+    ) -> dict:
+        with self._lock:
+            entry = self._entry(snapshot_id, vacancy_id)
+            entry.update({
+                "vacancyTitle": vacancy_title,
+                "companyName": company_name,
+                "vacancyDescriptionHash": vacancy_description_hash,
+                "resumeHash": resume_hash,
+                "matchAnalysis": result.match_analysis,
+                "coverLetter": result.cover_letter,
+                "coverLetterStatus": result.status,
+                "coverLetterGeneratedAt": result.generated_at,
+                "coverLetterEditedManually": False,
+                "generationProvider": result.generation_provider,
+                "generationModel": result.generation_model,
+                "promptVersion": result.prompt_version,
+                "generationAttempts": result.generation_attempts,
+                "generationError": result.generation_error,
+                "inputTokens": result.input_tokens,
+                "outputTokens": result.output_tokens,
+                "estimatedCost": result.estimated_cost,
+            })
+            return dict(entry)
+
+    def update_cover_letter(self, snapshot_id: str, vacancy_id: str, text: str) -> dict:
+        with self._lock:
+            snap = self._snapshots.get(snapshot_id)
+            if not snap:
+                raise ValueError("unknown snapshot_id")
+            if snap.get("locked"):
+                raise RuntimeError("snapshot already started")
+            entry = self._entry(snapshot_id, vacancy_id)
+            entry["coverLetter"] = text.strip()
+            entry["coverLetterStatus"] = "EDITED"
+            entry["coverLetterEditedManually"] = True
+            entry["coverLetterGeneratedAt"] = datetime.now(timezone.utc).isoformat()
+            entry["generationError"] = None
+            return dict(entry)
+
+    def get_cover_letter(self, snapshot_id: str, vacancy_id: str) -> dict | None:
+        with self._lock:
+            snap = self._snapshots.get(snapshot_id)
+            if not snap:
+                return None
+            entry = snap.setdefault("cover_letters", {}).get(vacancy_id)
+            return dict(entry) if entry else None
+
+    def cover_letter_entries(self, snapshot_id: str) -> list[dict]:
+        with self._lock:
+            snap = self._snapshots.get(snapshot_id)
+            if not snap:
+                return []
+            vacancies = {v.id for v in snap["vacancies"]}
+            return [dict(v) for k, v in snap.setdefault("cover_letters", {}).items() if k in vacancies]
+
+    def _entry(self, snapshot_id: str, vacancy_id: str) -> dict:
+        snap = self._snapshots.get(snapshot_id)
+        if not snap:
+            raise ValueError("unknown snapshot_id")
+        entry = snap.setdefault("cover_letters", {}).get(vacancy_id)
+        if not entry:
+            raise ValueError("unknown vacancy_id")
+        return entry
 
     def get(self, snapshot_id: str) -> dict | None:
         with self._lock:
             snap = self._snapshots.get(snapshot_id)
             if not snap:
                 return None
-            return {**snap, "vacancies": list(snap["vacancies"])}
+            return {**snap, "vacancies": list(snap["vacancies"]), "cover_letters": {k: dict(v) for k, v in snap.get("cover_letters", {}).items()}}
 
     def public(self, snapshot_id: str) -> dict:
         snap = self.get(snapshot_id)
@@ -65,7 +173,11 @@ class SnapshotStore:
             "resume_hash": snap["resume_hash"],
             "locked": bool(snap.get("locked")),
             **(snap.get("metadata") if isinstance(snap.get("metadata"), dict) else {}),
-            "vacancies": [asdict(v) for v in snap["vacancies"]],
+            "vacancies": [
+                {**asdict(v), "coverLetter": snap.get("cover_letters", {}).get(v.id, {})}
+                for v in snap["vacancies"]
+            ],
+            "cover_letters": list(snap.get("cover_letters", {}).values()),
         }
 
 
@@ -180,9 +292,4 @@ def preview_search(
         "diagnostics": diagnostics,
     }
     snapshot_id = SNAPSHOTS.create(search_url, session.selected_resume_hash, all_vacancies, metadata)
-    return {
-        "snapshot_id": snapshot_id,
-        "count": len(all_vacancies),
-        **metadata,
-        "vacancies": [asdict(v) for v in all_vacancies],
-    }
+    return SNAPSHOTS.public(snapshot_id)

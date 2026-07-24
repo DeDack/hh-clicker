@@ -12,6 +12,7 @@ from app.models import SessionData
 DATA_DIR = Path(os.environ.get("HH_CLEAN_DATA_DIR", "../hh-clicker-clean-userdata"))
 SETTINGS_FILE = DATA_DIR / "settings.json"
 APPLICATIONS_FILE = DATA_DIR / "applications.json"
+RESUMES_DIR = DATA_DIR / "resumes"
 _LOCK = threading.RLock()
 
 
@@ -51,6 +52,15 @@ def load_session() -> SessionData:
         recommendation_exclude_keywords=str(data.get("recommendation_exclude_keywords") or ""),
         pages=int(data.get("pages") or 1),
         delay_seconds=float(data.get("delay_seconds") or 1.0),
+        max_applications=max(0, int(data.get("max_applications") or 0)),
+        cover_letter_mode=str(data.get("cover_letter_mode") or "personal") if str(data.get("cover_letter_mode") or "personal") in {"common", "personal"} else "personal",
+        cover_letter_style=str(data.get("cover_letter_style") or "живой"),
+        cover_letter_length=str(data.get("cover_letter_length") or "среднее"),
+        cover_letter_use_company=bool(data.get("cover_letter_use_company", True)),
+        cover_letter_use_vacancy_title=bool(data.get("cover_letter_use_vacancy_title", True)),
+        cover_letter_auto_generate=bool(data.get("cover_letter_auto_generate", True)),
+        cover_letter_allow_empty_fallback=bool(data.get("cover_letter_allow_empty_fallback", False)),
+        cover_letter_max_attempts=max(1, min(int(data.get("cover_letter_max_attempts") or 2), 5)),
     )
 
 
@@ -71,6 +81,15 @@ def save_session(session: SessionData) -> None:
             "recommendation_exclude_keywords": session.recommendation_exclude_keywords,
             "pages": session.pages,
             "delay_seconds": session.delay_seconds,
+            "max_applications": session.max_applications,
+            "cover_letter_mode": session.cover_letter_mode,
+            "cover_letter_style": session.cover_letter_style,
+            "cover_letter_length": session.cover_letter_length,
+            "cover_letter_use_company": session.cover_letter_use_company,
+            "cover_letter_use_vacancy_title": session.cover_letter_use_vacancy_title,
+            "cover_letter_auto_generate": session.cover_letter_auto_generate,
+            "cover_letter_allow_empty_fallback": session.cover_letter_allow_empty_fallback,
+            "cover_letter_max_attempts": session.cover_letter_max_attempts,
         })
 
 
@@ -99,6 +118,25 @@ def mark_applied(resume_hash: str, vacancy_id: str, info: dict) -> None:
     save_applications(data)
 
 
+def load_resume_text(resume_hash: str) -> dict | None:
+    safe_hash = "".join(ch for ch in (resume_hash or "") if ch.isalnum())
+    if not safe_hash:
+        return None
+    with _LOCK:
+        data = _read_json(RESUMES_DIR / f"{safe_hash}.json", {})
+    if not isinstance(data, dict) or not data.get("text"):
+        return None
+    return data
+
+
+def save_resume_text(resume_hash: str, payload: dict) -> None:
+    safe_hash = "".join(ch for ch in (resume_hash or "") if ch.isalnum())
+    if not safe_hash:
+        return
+    with _LOCK:
+        _write_json(RESUMES_DIR / f"{safe_hash}.json", payload)
+
+
 def clear_user_data() -> None:
     with _LOCK:
         for path in (SETTINGS_FILE, APPLICATIONS_FILE):
@@ -106,3 +144,9 @@ def clear_user_data() -> None:
                 path.unlink()
             except FileNotFoundError:
                 pass
+        if RESUMES_DIR.exists():
+            for path in RESUMES_DIR.glob("*.json"):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass

@@ -68,6 +68,7 @@ class ApplyWorker:
 
     def _run(self, snapshot_id: str, vacancies: list[SearchVacancy], config: RunConfig, session: SessionData) -> None:
         snapshot_set = set(vacancies)
+        action_count = 0
         try:
             for vacancy in vacancies:
                 with self._lock:
@@ -76,6 +77,13 @@ class ApplyWorker:
                         self.state.log("STOPPED before next request")
                         return
                     self.state.current_vacancy = f"{vacancy.id} {vacancy.title[:80]}"
+
+                if config.max_applications > 0 and action_count >= config.max_applications:
+                    with self._lock:
+                        self.state.status = "done"
+                        self.state.current_vacancy = ""
+                        self.state.log(f"DONE reason=max_applications_reached limit={config.max_applications}")
+                    return
 
                 if not self._valid_member(vacancy, snapshot_id, snapshot_set, config):
                     with self._lock:
@@ -99,12 +107,25 @@ class ApplyWorker:
                     continue
 
                 if config.dry_run:
+                    action_count += 1
                     with self._lock:
                         self.state.processed += 1
                         self.state.skipped += 1
                         self.state.log(f"DRY_RUN vacancy={vacancy.id} title={vacancy.title[:120]}")
                 else:
-                    result, info = send_apply(session, vacancy.id, config.cover_letter)
+                    cover_letter = config.cover_letter
+                    if config.cover_letter_mode == "personal":
+                        entry = SNAPSHOTS.get_cover_letter(snapshot_id, vacancy.id) or {}
+                        cover_letter = str(entry.get("coverLetter") or "")
+                        status = str(entry.get("coverLetterStatus") or "")
+                        if not cover_letter and not config.allow_apply_without_cover_letter:
+                            with self._lock:
+                                self.state.skipped += 1
+                                self.state.processed += 1
+                                self.state.log(f"SKIP vacancy={vacancy.id} reason=no_snapshot_cover_letter status={status}")
+                            continue
+                    action_count += 1
+                    result, info = send_apply(session, vacancy.id, cover_letter)
                     with self._lock:
                         self.state.processed += 1
                         if result == "sent":

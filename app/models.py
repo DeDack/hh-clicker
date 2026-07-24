@@ -38,6 +38,9 @@ class RunConfig:
     pages: int
     delay_seconds: float
     dry_run: bool = True
+    cover_letter_mode: Literal["common", "personal"] = "common"
+    allow_apply_without_cover_letter: bool = False
+    max_applications: int = 0
 
 
 @dataclass
@@ -76,6 +79,15 @@ class SessionData:
     recommendation_exclude_keywords: str = ""
     pages: int = 1
     delay_seconds: float = 1.0
+    max_applications: int = 0
+    cover_letter_mode: Literal["common", "personal"] = "personal"
+    cover_letter_style: str = "живой"
+    cover_letter_length: str = "среднее"
+    cover_letter_use_company: bool = True
+    cover_letter_use_vacancy_title: bool = True
+    cover_letter_auto_generate: bool = True
+    cover_letter_allow_empty_fallback: bool = False
+    cover_letter_max_attempts: int = 2
 
     def public(self) -> dict:
         return {
@@ -90,4 +102,61 @@ class SessionData:
             "recommendation_exclude_keywords": self.recommendation_exclude_keywords,
             "pages": self.pages,
             "delay_seconds": self.delay_seconds,
+            "max_applications": self.max_applications,
+            "cover_letter_mode": self.cover_letter_mode,
+            "cover_letter_style": self.cover_letter_style,
+            "cover_letter_length": self.cover_letter_length,
+            "cover_letter_use_company": self.cover_letter_use_company,
+            "cover_letter_use_vacancy_title": self.cover_letter_use_vacancy_title,
+            "cover_letter_auto_generate": self.cover_letter_auto_generate,
+            "cover_letter_allow_empty_fallback": self.cover_letter_allow_empty_fallback,
+            "cover_letter_max_attempts": self.cover_letter_max_attempts,
         }
+
+
+@dataclass(frozen=True)
+class ResumeData:
+    id: str
+    title: str
+    text: str
+    hash: str
+
+
+@dataclass(frozen=True)
+class VacancyData:
+    id: str
+    title: str
+    url: str
+    description: str
+    company_name: str = ""
+    questions: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class CoverLetterSettings:
+    mode: Literal["common", "personal"] = "personal"
+    style: str = "живой"
+    length: str = "среднее"
+    use_company: bool = True
+    use_vacancy_title: bool = True
+    auto_generate: bool = True
+    allow_empty_fallback: bool = False
+    max_attempts: int = 2
+    model: str = ""
+    allowed_technologies: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CoverLetterResult:
+    match_analysis: dict
+    cover_letter: str
+    status: Literal["PENDING", "GENERATING", "GENERATED", "EDITED", "FAILED", "SKIPPED"]
+    generated_at: str
+    generation_model: str
+    generation_attempts: int
+    generation_error: str | None = None
+    generation_provider: str = ""
+    prompt_version: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    estimated_cost: float = 0.0
