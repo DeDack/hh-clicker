@@ -1,0 +1,15 @@
+services:
+  hh-clicker-clean:
+    build: .
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ../hh-clicker-clean-userdata:/app/data
+    environment:
+      HH_CLEAN_DATA_DIR: /app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped

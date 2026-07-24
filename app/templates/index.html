@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HH Clicker Clean</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+    body { margin: 0; background: #101418; color: #e8edf2; }
+    main { max-width: 1180px; margin: 0 auto; padding: 20px; display: grid; gap: 14px; }
+    section { border: 1px solid #2c3640; background: #151b21; padding: 14px; border-radius: 8px; }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 0 0 10px; color: #9fd0ff; }
+    details { border: 1px solid #2c3640; background: #151b21; padding: 14px; border-radius: 8px; }
+    summary { cursor: pointer; color: #9fd0ff; font-size: 15px; font-weight: 700; }
+    summary + .details-body { margin-top: 12px; }
+    label { display: block; font-size: 12px; color: #aab6c2; margin-bottom: 5px; }
+    textarea, input, select { width: 100%; box-sizing: border-box; background: #0d1116; color: #f4f7fa; border: 1px solid #34414d; border-radius: 6px; padding: 8px; }
+    textarea { min-height: 90px; resize: vertical; }
+    button { background: #238636; color: white; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+    button.secondary { background: #30363d; }
+    button.danger { background: #da3633; }
+    button.small { padding: 4px 8px; font-size: 12px; }
+    button:disabled { opacity: .55; cursor: default; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .row > * { width: auto; }
+    .muted { color: #8b949e; font-size: 12px; }
+    .ok { color: #56d364; }
+    .bad { color: #ff7b72; }
+    .warn { color: #f2cc60; }
+    .preview { max-height: 300px; overflow: auto; border: 1px solid #2c3640; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    td, th { border-bottom: 1px solid #27313a; padding: 6px; text-align: left; }
+    pre { white-space: pre-wrap; max-height: 300px; overflow: auto; background: #0d1116; border: 1px solid #2c3640; padding: 10px; border-radius: 6px; }
+    .diag { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .diag span { background: #0d1116; border: 1px solid #27313a; border-radius: 6px; padding: 4px 6px; color: #aab6c2; font-size: 12px; }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>HH Clicker Clean</h1>
+    <div class="muted">Один явный URL поиска → preview snapshot → dry-run/отклик только из snapshot.</div>
+  </header>
+
+  <section>
+    <h2>1. Сессия HH</h2>
+    <label>Copy as cURL из браузера hh.ru</label>
+    <textarea id="curl" placeholder="curl 'https://hh.ru/...' -H 'Cookie: ...'"></textarea>
+    <div class="row" style="margin-top:8px">
+      <button onclick="importSession()">Импортировать</button>
+      <button class="secondary" onclick="checkSession()">Проверить cookies</button>
+      <button class="secondary" onclick="refreshResumes()">Обновить резюме</button>
+      <button class="danger" onclick="clearSession()">Сбросить данные</button>
+      <span id="sessionStatus" class="muted">Сессия не импортирована</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section>
+      <h2>2. Резюме</h2>
+      <select id="resumeSelect"></select>
+      <div class="row" style="margin-top:8px">
+        <button onclick="selectResume()">Сохранить выбор</button>
+        <span id="resumeStatus" class="muted"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>3. Управление</h2>
+      <div class="muted">Запуск отправляет реальные отклики только по текущему preview snapshot.</div>
+      <div class="row" style="margin-top:10px">
+        <button onclick="startRun()">Запустить отклики</button>
+        <button class="danger" onclick="stopRun()">Остановить</button>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <h2>4. Сопроводительное письмо</h2>
+    <textarea id="coverLetter" placeholder="Здравствуйте! Рассмотрите, пожалуйста, моё резюме..."></textarea>
+  </section>
+
+  <section>
+    <h2>5. Поиск</h2>
+    <label>URL поиска HH</label>
+    <input id="searchUrl" placeholder="https://hh.ru/search/vacancy?...">
+    <div class="row" style="margin-top:8px">
+      <label>Страниц <input id="pages" type="number" min="1" max="50" value="1" style="width:90px"></label>
+      <label>Задержка, сек <input id="delay" type="number" min="0" step="0.1" value="1" style="width:110px"></label>
+      <button onclick="previewSearch()">Проверить поиск</button>
+      <span id="previewStatus" class="muted"></span>
+    </div>
+  </section>
+
+  <details>
+    <summary>Поиск вакансий по рекомендациям</summary>
+    <div class="details-body">
+      <label>URL рекомендаций HH</label>
+      <input id="recommendationUrl" placeholder="https://kazan.hh.ru/search/vacancy?resume=...">
+      <div class="grid" style="margin-top:8px">
+        <label>Ключевое слово в названии
+          <input id="recommendationKeyword" placeholder="java">
+        </label>
+        <div>
+          <label>Действие</label>
+          <button onclick="previewRecommendations()">Проверить рекомендации</button>
+        </div>
+      </div>
+      <div id="recommendationStatus" class="muted" style="margin-top:8px"></div>
+    </div>
+  </details>
+
+  <section>
+    <h2>6. Preview snapshot</h2>
+    <div class="row">
+      <span>snapshot_id: <b id="snapshotId">-</b></span>
+      <span>count: <b id="previewCount">0</b></span>
+      <span>cards: <b id="cardsTotal">0</b></span>
+      <span>duplicates: <b id="duplicateCount">0</b></span>
+    </div>
+    <div id="previewExplain" class="muted" style="margin-top:6px"></div>
+    <div id="previewDiag" class="diag"></div>
+    <div id="duplicateExamples" class="muted" style="margin-top:8px"></div>
+    <div class="preview" style="margin-top:8px">
+      <table>
+        <thead><tr><th>ID</th><th>Название</th><th>Страница</th><th>URL</th><th></th></tr></thead>
+        <tbody id="previewRows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. Статистика</h2>
+    <div class="row">
+      <span>status: <b id="stStatus">idle</b></span>
+      <span>found: <b id="stCollected">0</b></span>
+      <span>processed: <b id="stProcessed">0</b></span>
+      <span>applied: <b id="stApplied">0</b></span>
+      <span>already: <b id="stAlready">0</b></span>
+      <span>skipped: <b id="stSkipped">0</b></span>
+      <span>failed: <b id="stFailed">0</b></span>
+    </div>
+    <div class="muted" style="margin-top:6px">Текущая: <span id="stCurrent">-</span></div>
+  </section>
+
+  <section>
+    <h2>8. Логи</h2>
+    <pre id="logs"></pre>
+  </section>
+</main>
+
+<script>
+let currentSnapshotId = "";
+let previewVacancies = [];
+let previewLocked = false;
+const dirtyFields = new Set();
+
+function bindDirtyFields() {
+  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'pages', 'delay'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.dirtyBound) {
+      el.dataset.dirtyBound = '1';
+      el.addEventListener('input', () => dirtyFields.add(id));
+    }
+  });
+}
+
+function setFieldFromServer(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (document.activeElement === el || dirtyFields.has(id)) return;
+  el.value = value ?? '';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderPreview(data) {
+  currentSnapshotId = data.snapshot_id || currentSnapshotId;
+  previewVacancies = data.vacancies || [];
+  previewLocked = Boolean(data.locked);
+  document.getElementById('snapshotId').textContent = currentSnapshotId || '-';
+  document.getElementById('previewCount').textContent = data.count ?? previewVacancies.length;
+  document.getElementById('cardsTotal').textContent = data.cards_total ?? '-';
+  document.getElementById('duplicateCount').textContent = data.duplicate_count ?? '-';
+  document.getElementById('previewRows').innerHTML = previewVacancies.slice(0, 200).map(v =>
+    `<tr>
+      <td>${esc(v.id)}</td>
+      <td>${esc(v.title)}</td>
+      <td>${v.source_page}</td>
+      <td><a href="${esc(v.url)}" target="_blank">${esc(v.url)}</a></td>
+      <td><button class="danger small" ${previewLocked ? 'disabled' : ''} onclick="removeVacancy('${esc(v.id)}')">Удалить</button></td>
+    </tr>`
+  ).join('');
+  const cards = Number(data.cards_total || 0);
+  const unique = Number(data.count || previewVacancies.length || 0);
+  const duplicates = Number(data.duplicate_count || 0);
+  const filtered = Number(data.filtered_by_title || 0);
+  document.getElementById('previewExplain').textContent = cards
+    ? `HH отдал ${cards} карточек. В snapshot попало ${unique} уникальных vacancy ID; ${duplicates} дублей отброшено; ${filtered} отфильтровано по названию.`
+    : '';
+  document.getElementById('previewDiag').innerHTML = (data.diagnostics || []).map(d =>
+    `<span>p${d.page}: ${d.cards}/${d.accepted}</span>`
+  ).join('');
+  const examples = (data.duplicate_examples || []).slice(0, 8);
+  document.getElementById('duplicateExamples').innerHTML = examples.length
+    ? `Примеры дублей: ${examples.map(d => `${esc(d.id)} p${d.first_page}->p${d.duplicate_page}`).join(', ')}`
+    : '';
+}
+
+async function api(path, opts={}) {
+  const res = await fetch(path, {headers: {'Content-Type':'application/json'}, ...opts});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+function renderSession(session) {
+  document.getElementById('sessionStatus').textContent = session?.has_session ? 'Сессия загружена' : 'Сессия не импортирована';
+  document.getElementById('sessionStatus').className = session?.has_session ? 'ok' : 'muted';
+  setFieldFromServer('coverLetter', session?.cover_letter || '');
+  setFieldFromServer('searchUrl', session?.last_search_url || '');
+  setFieldFromServer('recommendationUrl', session?.last_recommendation_url || '');
+  setFieldFromServer('recommendationKeyword', session?.recommendation_keyword || '');
+  setFieldFromServer('pages', session?.pages || 1);
+  setFieldFromServer('delay', session?.delay_seconds ?? 1);
+  const sel = document.getElementById('resumeSelect');
+  sel.innerHTML = (session?.resumes || []).map(r =>
+    `<option value="${esc(r.hash)}" ${r.hash === session.selected_resume_hash ? 'selected' : ''}>${esc(r.title)} · ${esc(r.hash.slice(0, 10))}</option>`
+  ).join('');
+}
+
+async function importSession() {
+  const st = document.getElementById('sessionStatus');
+  st.textContent = 'Импортирую и проверяю...';
+  st.className = 'muted';
+  try {
+    const data = await api('/api/session/import', {method:'POST', body: JSON.stringify({curl: document.getElementById('curl').value})});
+    document.getElementById('curl').value = '';
+    renderSession(data.session);
+    st.textContent = data.message;
+    st.className = 'ok';
+  } catch (e) {
+    st.textContent = e.message;
+    st.className = 'bad';
+  }
+}
+
+async function checkSession() {
+  const st = document.getElementById('sessionStatus');
+  st.textContent = 'Проверяю cookies...';
+  st.className = 'muted';
+  try {
+    const data = await api('/api/session/check');
+    renderSession(data.session);
+    st.textContent = data.message;
+    st.className = data.alive ? 'ok' : 'bad';
+  } catch (e) {
+    st.textContent = e.message;
+    st.className = 'bad';
+  }
+}
+
+async function clearSession() {
+  if (!confirm('Удалить локальные cookies, резюме, письмо, URL и историю откликов?')) return;
+  const data = await api('/api/session/clear', {method:'POST', body: '{}'});
+  currentSnapshotId = "";
+  renderSession(data.session);
+  renderPreview({snapshot_id: '', count: 0, cards_total: 0, duplicate_count: 0, vacancies: [], diagnostics: []});
+  document.getElementById('curl').value = '';
+  document.getElementById('sessionStatus').textContent = data.message;
+  document.getElementById('sessionStatus').className = 'warn';
+}
+
+async function refreshResumes() {
+  const data = await api('/api/resumes');
+  renderSession(data.session);
+  document.getElementById('resumeStatus').textContent = data.message;
+}
+
+async function selectResume() {
+  const resume_hash = document.getElementById('resumeSelect').value;
+  const data = await api('/api/resume/select', {method:'POST', body: JSON.stringify({resume_hash})});
+  renderSession(data.session);
+  document.getElementById('resumeStatus').textContent = 'Сохранено';
+}
+
+async function saveSettings() {
+  await api('/api/settings', {method:'POST', body: JSON.stringify({
+    cover_letter: document.getElementById('coverLetter').value,
+    search_url: document.getElementById('searchUrl').value,
+    recommendation_url: document.getElementById('recommendationUrl').value,
+    recommendation_keyword: document.getElementById('recommendationKeyword').value,
+    pages: Number(document.getElementById('pages').value || 1),
+    delay_seconds: Number(document.getElementById('delay').value || 0),
+  })});
+  ['coverLetter', 'searchUrl', 'recommendationUrl', 'recommendationKeyword', 'pages', 'delay'].forEach(id => dirtyFields.delete(id));
+}
+
+async function previewSearch() {
+  const st = document.getElementById('previewStatus');
+  st.textContent = 'Загружаю HH...';
+  try {
+    await saveSettings();
+    const data = await api('/api/search/preview', {method:'POST', body: JSON.stringify({
+      search_url: document.getElementById('searchUrl').value,
+      pages: Number(document.getElementById('pages').value || 1),
+    })});
+    renderPreview(data);
+    st.textContent = `Готово: ${data.count}; карточек HH: ${data.cards_total}; дублей: ${data.duplicate_count}`;
+    st.className = 'ok';
+  } catch (e) {
+    st.textContent = e.message;
+    st.className = 'bad';
+  }
+}
+
+async function previewRecommendations() {
+  const st = document.getElementById('recommendationStatus');
+  st.textContent = 'Загружаю рекомендации HH...';
+  st.className = 'muted';
+  try {
+    await saveSettings();
+    const data = await api('/api/search/recommendations/preview', {method:'POST', body: JSON.stringify({
+      recommendation_url: document.getElementById('recommendationUrl').value,
+      recommendation_keyword: document.getElementById('recommendationKeyword').value,
+      pages: Number(document.getElementById('pages').value || 1),
+    })});
+    renderPreview(data);
+    const keyword = data.title_keyword ? `; фильтр: ${data.title_keyword}` : '';
+    st.textContent = `Готово: ${data.count}; карточек HH: ${data.cards_total}; отфильтровано: ${data.filtered_by_title}${keyword}`;
+    st.className = 'ok';
+  } catch (e) {
+    st.textContent = e.message;
+    st.className = 'bad';
+  }
+}
+
+async function removeVacancy(vacancyId) {
+  try {
+    const data = await api('/api/search/snapshot/remove', {method:'POST', body: JSON.stringify({
+      snapshot_id: currentSnapshotId,
+      vacancy_id: vacancyId,
+    })});
+    renderPreview(data);
+    document.getElementById('previewStatus').textContent = `Удалено ${vacancyId}; осталось ${data.count}`;
+    document.getElementById('previewStatus').className = 'warn';
+  } catch (e) {
+    document.getElementById('previewStatus').textContent = e.message;
+    document.getElementById('previewStatus').className = 'bad';
+  }
+}
+
+async function startRun() {
+  await saveSettings();
+  const data = await api('/api/run/start', {method:'POST', body: JSON.stringify({
+    snapshot_id: currentSnapshotId,
+    allow_real_apply: true,
+    cover_letter: document.getElementById('coverLetter').value,
+    delay_seconds: Number(document.getElementById('delay').value || 0),
+  })});
+  renderWorker(data.state);
+}
+
+async function stopRun() {
+  const data = await api('/api/run/stop', {method:'POST', body: '{}'});
+  renderWorker(data.state);
+}
+
+function renderWorker(w) {
+  document.getElementById('stStatus').textContent = w.status;
+  document.getElementById('stCollected').textContent = w.collected;
+  document.getElementById('stProcessed').textContent = w.processed;
+  document.getElementById('stApplied').textContent = w.applied;
+  document.getElementById('stAlready').textContent = w.already || 0;
+  document.getElementById('stSkipped').textContent = w.skipped;
+  document.getElementById('stFailed').textContent = w.failed;
+  document.getElementById('stCurrent').textContent = w.current_vacancy || '-';
+  document.getElementById('logs').textContent = (w.logs || []).join('\n');
+}
+
+async function poll() {
+  try {
+    const data = await api('/api/run/state');
+    renderSession(data.session);
+    renderWorker(data.worker);
+  } catch(e) {}
+}
+setInterval(poll, 1000);
+bindDirtyFields();
+poll();
+</script>
+</body>
+</html>
