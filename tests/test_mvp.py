@@ -220,6 +220,57 @@ def test_preview_can_exclude_title_keywords(monkeypatch):
     assert [v["id"] for v in result["vacancies"]] == ["111"]
 
 
+def test_preview_exclude_keywords_match_normalized_and_compact_titles(monkeypatch):
+    def fake_get(url, **kwargs):
+        return FakeResponse("""
+        <div data-qa="vacancy-serp__results">
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/111">Java backend developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/222">Full Stack Java developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/333">Full-stack Java developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/444">fullstack Java developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/555">full stack Java developer</a></div>
+        </div>
+        """)
+
+    monkeypatch.setattr("app.search_service.HH.get", fake_get)
+    session = SessionData(cookies={"hhtoken": "h"}, headers={}, selected_resume_hash="resume-preview")
+    result = preview_search(
+        session,
+        "https://kazan.hh.ru/search/vacancy?resume=abc",
+        1,
+        title_keyword="java",
+        exclude_title_keywords="fullstack",
+    )
+    assert result["count"] == 1
+    assert result["excluded_by_title"] == 4
+    assert [v["id"] for v in result["vacancies"]] == ["111"]
+    assert {v["id"] for v in result["excluded_vacancies"]} == {"222", "333", "444", "555"}
+    assert {v["reason"] for v in result["excluded_vacancies"]} == {"excluded_word=fullstack"}
+
+
+def test_preview_exclude_keywords_support_phrases(monkeypatch):
+    def fake_get(url, **kwargs):
+        return FakeResponse("""
+        <div data-qa="vacancy-serp__results">
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/111">Java backend developer</a></div>
+          <div data-qa="vacancy-serp__vacancy"><a data-qa="serp-item__title" href="/vacancy/222">Java team lead</a></div>
+        </div>
+        """)
+
+    monkeypatch.setattr("app.search_service.HH.get", fake_get)
+    session = SessionData(cookies={"hhtoken": "h"}, headers={}, selected_resume_hash="resume-preview")
+    result = preview_search(
+        session,
+        "https://kazan.hh.ru/search/vacancy?resume=abc",
+        1,
+        title_keyword="java",
+        exclude_title_keywords="team lead",
+    )
+    assert result["count"] == 1
+    assert result["excluded_vacancies"][0]["reason"] == "excluded_word=team lead"
+    assert [v["id"] for v in result["vacancies"]] == ["111"]
+
+
 def test_start_rejects_unknown_snapshot_id():
     client = TestClient(app)
     response = client.post("/api/run/start", json={"snapshot_id": "missing"})

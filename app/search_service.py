@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import threading
 import time
 from dataclasses import asdict
@@ -71,20 +72,36 @@ class SnapshotStore:
 SNAPSHOTS = SnapshotStore()
 
 
-def _title_matches_keyword(title: str, keyword: str) -> bool:
-    keyword = (keyword or "").strip().casefold()
-    if not keyword:
+def _normalize_title_text(text: str) -> tuple[str, str]:
+    spaced = re.sub(r"[\W_]+", " ", (text or "").casefold())
+    spaced = re.sub(r"\s+", " ", spaced).strip()
+    compact = spaced.replace(" ", "")
+    return spaced, compact
+
+
+def _keyword_match(title: str, keyword: str) -> bool:
+    keyword_spaced, keyword_compact = _normalize_title_text(keyword)
+    if not keyword_spaced:
         return True
-    return keyword in title.casefold()
+    title_spaced, title_compact = _normalize_title_text(title)
+    return keyword_spaced in title_spaced or keyword_compact in title_compact
+
+
+def _title_matches_keyword(title: str, keyword: str) -> bool:
+    return _keyword_match(title, keyword)
 
 
 def _split_keywords(raw: str) -> list[str]:
     return [part.strip().casefold() for part in (raw or "").split(",") if part.strip()]
 
 
-def _title_has_any_keyword(title: str, keywords: list[str]) -> bool:
-    folded = title.casefold()
-    return any(keyword in folded for keyword in keywords)
+def _title_excluded_by_keyword(title: str, keywords: list[str]) -> str:
+    title_spaced, title_compact = _normalize_title_text(title)
+    for keyword in keywords:
+        keyword_spaced, keyword_compact = _normalize_title_text(keyword)
+        if keyword_spaced and (keyword_spaced in title_spaced or keyword_compact in title_compact):
+            return keyword
+    return ""
 
 
 def preview_search(
@@ -110,6 +127,7 @@ def preview_search(
     duplicate_examples = []
     filtered_by_title = 0
     excluded_by_title = 0
+    excluded_vacancies = []
     for page in range(pages):
         page_url = build_page_url(search_url, page, items_on_page=20)
         response = HH.get(page_url, headers=headers, cookies=session.cookies, timeout=20)
@@ -121,8 +139,16 @@ def preview_search(
             if not _title_matches_keyword(vacancy.title, title_keyword):
                 filtered_by_title += 1
                 continue
-            if _title_has_any_keyword(vacancy.title, exclude_keywords):
+            excluded_word = _title_excluded_by_keyword(vacancy.title, exclude_keywords)
+            if excluded_word:
                 excluded_by_title += 1
+                excluded_vacancies.append({
+                    "id": vacancy.id,
+                    "title": vacancy.title,
+                    "source_page": vacancy.source_page,
+                    "reason": f"excluded_word={excluded_word}",
+                    "excluded_word": excluded_word,
+                })
                 continue
             if vacancy.id in seen:
                 duplicate_count += 1
@@ -150,6 +176,7 @@ def preview_search(
         "exclude_title_keywords": exclude_keywords,
         "filtered_by_title": filtered_by_title,
         "excluded_by_title": excluded_by_title,
+        "excluded_vacancies": excluded_vacancies,
         "diagnostics": diagnostics,
     }
     snapshot_id = SNAPSHOTS.create(search_url, session.selected_resume_hash, all_vacancies, metadata)
