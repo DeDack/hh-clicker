@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-campaign-preview-fields
+      author: codex
+      changes:
+        - addColumn:
+            tableName: campaigns
+            columns:
+              - column: { name: pages, type: integer, defaultValueNumeric: 1, constraints: { nullable: false } }
+              - column: { name: include_keywords, type: text }
+              - column: { name: exclude_keywords, type: text }
+              - column: { name: common_cover_letter, type: text }
+        - addColumn:
+            tableName: campaign_vacancies
+            columns:
+              - column: { name: generation_attempts, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: version, type: bigint, defaultValueNumeric: 0, constraints: { nullable: false } }

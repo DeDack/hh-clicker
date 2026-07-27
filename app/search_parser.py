@@ -57,6 +57,7 @@ def parse_search_vacancies(html: str, source_search_url: str, source_page: int) 
         title = title_el.get_text(" ", strip=True) if title_el else link.get_text(" ", strip=True)
         if not title:
             continue
+        search_text = re.sub(r"\s+", " ", card.get_text(" ", strip=True)).strip()
         seen.add(vacancy_id)
         vacancies.append(SearchVacancy(
             id=vacancy_id,
@@ -64,6 +65,7 @@ def parse_search_vacancies(html: str, source_search_url: str, source_page: int) 
             title=title,
             source_search_url=source_search_url,
             source_page=source_page,
+            search_text=search_text,
         ))
     return vacancies, {
         "cards": len(cards),

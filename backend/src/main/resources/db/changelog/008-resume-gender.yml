@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 008-resume-gender
+      author: codex
+      changes:
+        - addColumn:
+            tableName: resumes
+            columns:
+              - column:
+                  name: gender
+                  type: varchar(16)
+                  defaultValue: UNKNOWN
+                  constraints:
+                    nullable: false

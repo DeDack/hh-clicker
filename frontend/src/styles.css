@@ -1,0 +1,325 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #18212f;
+  background: #f4f7fb;
+  --bg: #f4f7fb;
+  --panel: #ffffff;
+  --line: #d8dee8;
+  --soft: #f7f9fc;
+  --text: #18212f;
+  --muted: #647084;
+  --blue: #2563eb;
+  --blue-dark: #1d4ed8;
+  --cyan: #0891b2;
+  --red: #b42318;
+  --green: #087443;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(37, 99, 235, .10), transparent 28%),
+    radial-gradient(circle at 85% 4%, rgba(8, 145, 178, .10), transparent 30%),
+    var(--bg);
+  color: var(--text);
+}
+a { color: inherit; text-decoration: none; }
+p { margin: 0; color: var(--muted); line-height: 1.45; }
+h1 { margin: 0; font-size: 24px; }
+h2 { margin: 0; font-size: 28px; }
+h3 { margin: 0; font-size: 17px; }
+small { color: var(--muted); }
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+aside {
+  background: linear-gradient(180deg, #111827 0%, #172033 58%, #0f172a 100%);
+  color: #f8fafc;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+nav { display: grid; gap: 6px; }
+nav a {
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+nav a:hover, nav a.active { background: rgba(255,255,255,.1); color: white; }
+
+main { padding: 28px; }
+.page {
+  display: grid;
+  gap: 18px;
+}
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.panel, .drawer, .item, .vacancy-card, .card, .empty {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .06);
+}
+.narrow { width: min(420px, 100%); }
+
+button, .button-link {
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue), var(--cyan));
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+button:hover, .button-link:hover { background: linear-gradient(135deg, var(--blue-dark), #0e7490); }
+button:disabled { opacity: .48; cursor: not-allowed; }
+.ghost, .ghost-link { background: #eef2f7; color: #172033; border: 1px solid #d9e1eb; }
+.ghost:hover, .ghost-link:hover { background: #d9e1eb; }
+.danger { background: #fee4e2; color: var(--red); }
+.danger:hover { background: #fecdca; }
+.selected { background: #1f2937; color: white; }
+
+input, textarea, select {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  color: var(--text);
+  font: inherit;
+}
+input:focus, textarea:focus, select:focus {
+  outline: 3px solid rgba(37, 99, 235, .14);
+  border-color: #9bb8ff;
+  background: white;
+}
+textarea { min-height: 104px; resize: vertical; }
+form { display: grid; gap: 12px; }
+.field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.field > span { color: #4b5565; }
+.check {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 6px 10px;
+  align-items: start;
+  color: #344054;
+  font-weight: 700;
+}
+.check input { width: 18px; min-height: 18px; margin-top: 2px; }
+.check small { grid-column: 2; font-weight: 500; }
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.auth-page .panel { padding: 22px; display: grid; gap: 12px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.form-span { grid-column: 1 / -1; }
+.stats, .progress-grid, .cards-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.progress-grid { grid-template-columns: repeat(5, minmax(120px, 1fr)); }
+.card { padding: 14px; display: grid; gap: 5px; }
+.card:hover, .item:hover, .vacancy-card:hover { border-color: #c8d5ea; }
+.card span { color: var(--muted); font-size: 13px; }
+.card strong { font-size: 22px; }
+.list { display: grid; gap: 10px; }
+.item { padding: 14px; display: grid; gap: 8px; }
+.row {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #075985;
+  font-size: 13px;
+  font-weight: 800;
+}
+.hero-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.hero-strip > div {
+  background: linear-gradient(135deg, #ffffff, #eef7ff);
+  border: 1px solid #d8e7f7;
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  gap: 4px;
+}
+.hero-strip strong {
+  font-size: 28px;
+  line-height: 1;
+  color: #102a56;
+}
+.hero-strip span {
+  color: var(--muted);
+  font-weight: 700;
+}
+.account-card, .resume-card {
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,.94), rgba(255,255,255,1));
+}
+.card-title-row {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  justify-content: space-between;
+}
+.status-ok, .status-bad {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.status-ok { background: #dcfae6; color: #05603a; }
+.status-bad { background: #fef0c7; color: #93370d; }
+.error { color: var(--red); margin: 4px 0; }
+.warning {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.muted-link, .text-link { color: var(--blue); }
+.side-note {
+  margin-top: auto;
+  display: grid;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+}
+.section-title { margin-top: 8px; }
+.empty { padding: 18px; color: var(--muted); text-align: center; }
+.drawer { padding: 16px; background: linear-gradient(180deg, #ffffff, #f8fbff); }
+.search-card, .campaign-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.campaign-card { color: inherit; }
+.campaign-card-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.card-actions {
+  justify-content: flex-end;
+}
+.steps { display: grid; gap: 14px; }
+.step {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+.segmented { display: flex; gap: 8px; flex-wrap: wrap; }
+.campaign-top {
+  display: grid;
+  grid-template-columns: minmax(240px, .8fr) minmax(0, 1.6fr);
+  gap: 16px;
+  align-items: start;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+.action-bar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.vacancy-card { padding: 12px; display: grid; gap: 10px; }
+.vacancy-main {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+.vacancy-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+.vacancy-check input[type="checkbox"] { width: 18px; min-height: 18px; }
+.vacancy-details {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  display: grid;
+  gap: 10px;
+}
+.toasts {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  display: grid;
+  gap: 8px;
+  z-index: 20;
+}
+.toast {
+  background: #101828;
+  color: white;
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18);
+}
+
+@media (max-width: 980px) {
+  .app-shell { grid-template-columns: 1fr; }
+  aside { min-height: auto; }
+  nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-grid, .stats, .progress-grid, .cards-grid, .hero-strip, .campaign-top, .search-card, .vacancy-main { grid-template-columns: 1fr; }
+  main { padding: 18px; }
+  .page-head, .row { align-items: stretch; flex-direction: column; }
+}

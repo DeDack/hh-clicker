@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-vacancy-load-limit
+      author: codex
+      changes:
+        - addColumn:
+            tableName: saved_searches
+            columns:
+              - column:
+                  name: vacancy_load_limit
+                  type: integer
+        - addColumn:
+            tableName: campaigns
+            columns:
+              - column:
+                  name: vacancy_load_limit
+                  type: integer

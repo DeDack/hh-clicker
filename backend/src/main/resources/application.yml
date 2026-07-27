@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: hh-clicker-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/hh_clicker}
+    username: ${SPRING_DATASOURCE_USERNAME:hh_clicker}
+    password: ${SPRING_DATASOURCE_PASSWORD:hh_clicker}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.yml
+
+server:
+  port: 8080
+
+app:
+  cors:
+    frontend-origin: ${FRONTEND_ORIGIN:http://127.0.0.1:5173}
+  admin-seed:
+    email: ${FIRST_ADMIN_EMAIL:}
+    password: ${FIRST_ADMIN_PASSWORD:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+hh:
+  adapter:
+    url: ${HH_ADAPTER_URL:http://hh-adapter:8000}
+    api-key: ${HH_ADAPTER_API_KEY:}
+    connect-timeout-seconds: ${HH_ADAPTER_CONNECT_TIMEOUT_SECONDS:5}
+    read-timeout-seconds: ${HH_ADAPTER_READ_TIMEOUT_SECONDS:60}
+
+security:
+  encryption:
+    hh-session-key: ${HH_SESSION_ENCRYPTION_KEY:}
+  jwt:
+    access-secret: ${JWT_ACCESS_SECRET:dev-access-secret-change-me-dev-access-secret-change-me}
+    refresh-secret: ${JWT_REFRESH_SECRET:dev-refresh-secret-change-me-dev-refresh-secret-change-me}
+    access-token-ttl-minutes: ${JWT_ACCESS_TTL_MINUTES:15}
+    refresh-token-ttl-days: ${JWT_REFRESH_TTL_DAYS:30}
+    refresh-cookie-name: ${JWT_REFRESH_COOKIE_NAME:refreshToken}
+    refresh-cookie-secure: ${APP_COOKIE_SECURE:${JWT_REFRESH_COOKIE_SECURE:false}}
+    refresh-cookie-same-site: ${APP_COOKIE_SAME_SITE:${JWT_REFRESH_COOKIE_SAME_SITE:Lax}}

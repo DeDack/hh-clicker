@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-saved-search-common-letter
+      author: codex
+      changes:
+        - addColumn:
+            tableName: saved_searches
+            columns:
+              - column:
+                  name: default_common_cover_letter
+                  type: text

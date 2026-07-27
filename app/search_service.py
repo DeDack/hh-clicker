@@ -203,6 +203,10 @@ def _title_matches_keyword(title: str, keyword: str) -> bool:
     return _keyword_match(title, keyword)
 
 
+def _vacancy_matches_keyword(vacancy: SearchVacancy, keyword: str) -> bool:
+    return _keyword_match(" ".join((vacancy.title, vacancy.search_text)), keyword)
+
+
 def _split_keywords(raw: str) -> list[str]:
     return [part.strip().casefold() for part in (raw or "").split(",") if part.strip()]
 
@@ -212,6 +216,15 @@ def _title_excluded_by_keyword(title: str, keywords: list[str]) -> str:
     for keyword in keywords:
         keyword_spaced, keyword_compact = _normalize_title_text(keyword)
         if keyword_spaced and (keyword_spaced in title_spaced or keyword_compact in title_compact):
+            return keyword
+    return ""
+
+
+def _vacancy_excluded_by_keyword(vacancy: SearchVacancy, keywords: list[str]) -> str:
+    text_spaced, text_compact = _normalize_title_text(" ".join((vacancy.title, vacancy.search_text)))
+    for keyword in keywords:
+        keyword_spaced, keyword_compact = _normalize_title_text(keyword)
+        if keyword_spaced and (keyword_spaced in text_spaced or keyword_compact in text_compact):
             return keyword
     return ""
 
@@ -241,17 +254,17 @@ def preview_search(
     excluded_by_title = 0
     excluded_vacancies = []
     for page in range(pages):
-        page_url = build_page_url(search_url, page, items_on_page=20)
+        page_url = build_page_url(search_url, page, items_on_page=100)
         response = HH.get(page_url, headers=headers, cookies=session.cookies, timeout=20)
         if response.status_code != 200:
             raise RuntimeError(f"HH search returned HTTP {response.status_code} on page {page}")
         vacancies, diag = parse_search_vacancies(response.text, search_url, page)
         diagnostics.append({"page": page, **diag})
         for vacancy in vacancies:
-            if not _title_matches_keyword(vacancy.title, title_keyword):
+            if not _vacancy_matches_keyword(vacancy, title_keyword):
                 filtered_by_title += 1
                 continue
-            excluded_word = _title_excluded_by_keyword(vacancy.title, exclude_keywords)
+            excluded_word = _vacancy_excluded_by_keyword(vacancy, exclude_keywords)
             if excluded_word:
                 excluded_by_title += 1
                 excluded_vacancies.append({

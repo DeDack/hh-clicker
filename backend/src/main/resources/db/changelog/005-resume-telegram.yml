@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-resume-telegram
+      author: codex
+      changes:
+        - addColumn:
+            tableName: resumes
+            columns:
+              - column:
+                  name: telegram_username
+                  type: varchar(64)

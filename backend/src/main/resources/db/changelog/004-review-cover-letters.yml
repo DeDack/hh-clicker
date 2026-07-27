@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-review-cover-letters
+      author: codex
+      changes:
+        - addColumn:
+            tableName: campaigns
+            columns:
+              - column:
+                  name: review_cover_letters_before_apply
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false

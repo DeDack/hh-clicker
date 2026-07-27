@@ -1,0 +1,17 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/001-initial-schema.yml
+  - include:
+      file: db/changelog/002-saved-search-and-campaign-fields.yml
+  - include:
+      file: db/changelog/003-campaign-preview-fields.yml
+  - include:
+      file: db/changelog/004-review-cover-letters.yml
+  - include:
+      file: db/changelog/005-resume-telegram.yml
+  - include:
+      file: db/changelog/006-vacancy-load-limit.yml
+  - include:
+      file: db/changelog/007-already-applied-preview.yml
+  - include:
+      file: db/changelog/008-resume-gender.yml

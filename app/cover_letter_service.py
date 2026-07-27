@@ -18,7 +18,7 @@ from app.storage import load_resume_text, save_resume_text
 
 
 LOGGER = logging.getLogger("uvicorn.error")
-PROMPT_VERSION = "v2-single-pass"
+PROMPT_VERSION = "v3-gender-strict"
 DEFAULT_MODEL = os.environ.get("KOMAPI_MODEL") or os.environ.get("LLM_MODEL", "claude-haiku-4-5")
 MAX_DESCRIPTION_CHARS = int(os.environ.get("COVER_LETTER_MAX_DESCRIPTION_CHARS", "3000"))
 MAX_RESUME_CHARS = int(os.environ.get("COVER_LETTER_MAX_RESUME_CHARS", "4000"))
@@ -68,7 +68,32 @@ FORBIDDEN_PHRASES = [
     "готов внести значительный вклад",
     "динамично развивающаяся компания",
     "благодарю за уделённое время",
+    "готов обсудить",
+    "готова обсудить",
+    "буду рад",
+    "буду рада",
+    "готов помочь",
+    "готова помочь",
+    "обсудим детали",
+    "буду полезен",
+    "буду полезна",
+    "рассмотрите моё резюме",
+    "рассмотрите мое резюме",
+    "надеюсь на обратную связь",
 ]
+
+SERVICE_ANALYSIS_MARKERS = [
+    "профиль совпадает",
+    "вакансия требует",
+    "резюме показывает",
+    "основной профиль резюме",
+    "вакансия требует опыта",
+    "резюме показывает сильный опыт",
+    "сопроводительное письмо",
+]
+
+MALE_SELF_FORMS = ("проектировал", "анализировал", "работал", "готов", "участвовал")
+FEMALE_SELF_FORMS = ("проектировала", "анализировала", "работала", "готова", "участвовала")
 
 _ANALYSIS_CACHE: dict[str, dict] = {}
 
@@ -292,6 +317,38 @@ def _fallback_analysis(resume: ResumeData, vacancy: VacancyData) -> dict:
     }
 
 
+def _normalize_candidate_gender(raw: str | None) -> str:
+    value = (raw or "").strip().upper()
+    return value if value in {"MALE", "FEMALE", "UNKNOWN"} else "UNKNOWN"
+
+
+def _strip_wrapping_quotes(text: str) -> str:
+    stripped = (text or "").strip()
+    pairs = (("«", "»"), ('"', '"'), ("'", "'"))
+    for left, right in pairs:
+        if stripped.startswith(left) and stripped.endswith(right) and len(stripped) >= 2:
+            return stripped[1:-1].strip()
+    return stripped
+
+
+def _clean_model_response(text: str) -> str:
+    text = _strip_wrapping_quotes(text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _ensure_telegram_contact(letter: str, telegram_username: str) -> str:
+    clean = (telegram_username or "").strip().lstrip("@")
+    text = _clean_model_response(letter)
+    if not clean or not text:
+        return text
+    text = text.rstrip()
+    if text and text[-1] not in ".!?":
+        text += "."
+    return f"{text} Мой тг @{clean}."
+
+
 class PromptBuilder:
     def analysis_prompt(self, resume: ResumeData, vacancy: VacancyData) -> tuple[str, str]:
         system = (
@@ -319,14 +376,28 @@ class PromptBuilder:
         return system, json.dumps(user, ensure_ascii=False)
 
     def letter_prompt(self, resume: ResumeData, vacancy: VacancyData, analysis: dict, settings: CoverLetterSettings, corrective: str = "") -> tuple[str, str]:
+        gender = _normalize_candidate_gender(resume.gender)
+        gender_rule = {
+            "FEMALE": "Используй женский грамматический род владельца резюме во всём письме: проектировала, анализировала, работала, готова, участвовала.",
+            "MALE": "Используй мужской грамматический род владельца резюме во всём письме: проектировал, анализировал, работал, готов, участвовал.",
+            "UNKNOWN": "Используй гендерно-нейтральные конструкции. Не выбирай самостоятельно мужской или женский род: есть опыт проектирования, в работе использовались, опыт включает.",
+        }[gender]
         system = (
-            "Ты пишешь короткое персональное сопроводительное письмо на русском.\n"
-            "Сначала мысленно сверь основной профиль резюме и вакансии. Если профиль явно не совпадает, "
-            "например Java backend против Python/Data/iOS/frontend, верни ровно NONMATCH.\n"
-            "Если профиль совпадает или близок, верни письмо: 2-3 предложения, максимум 50 слов, без приветствия, markdown, списков и заголовков.\n"
-            "Свяжи главную потребность вакансии с 1-2 фактами из резюме. Не выдумывай проекты, работодателей, технологии, цифры и достижения.\n"
-            "Не используй фразы: меня заинтересовала, идеально подхожу, полностью соответствую, ценный актив, готов внести вклад.\n"
-            "Закончи доброжелательно: «Буду рад пообщаться по вакансии и подробнее рассказать про похожий опыт»."
+            "Ты пишешь короткое сопроводительное письмо на русском языке от лица владельца резюме.\n"
+            f"Пол владельца резюме: {gender}.\n"
+            "Сначала молча сопоставь вакансию и резюме. Проведи анализ молча. "
+            "Не выводи рассуждения, сравнение профилей и пояснения. В ответе должен быть только текст, который будет напрямую отправлен работодателю.\n"
+            "Если основной профиль явно не подходит, верни только NONMATCH.\n"
+            "Если профиль подходит, верни только готовое письмо для работодателя.\n"
+            "Требования: 2-4 предложения; примерно 45-80 слов без учёта Telegram; только факты из резюме и candidate profile; "
+            "связать опыт кандидата с конкретными задачами вакансии; не писать внутренний анализ; не писать «Профиль совпадает»; "
+            "не пересказывать вакансию со слов «Вакансия требует»; не использовать шаблонные финалы; не использовать приветствие; "
+            "не использовать markdown; не использовать длинное тире; не использовать разделители; не придумывать опыт; "
+            "не вставлять Telegram, он будет добавлен отдельно. Последнее смысловое предложение должно продолжать содержание письма и быть связано с конкретной вакансией.\n"
+            "Запрещённые финалы: «Готов обсудить», «Готова обсудить», «Буду рад», «Буду рада», «Готов помочь», «Готова помочь», "
+            "«Обсудим детали», «Буду полезен», «Буду полезна», «Рассмотрите моё резюме», «Надеюсь на обратную связь».\n"
+            "Запрещено возвращать анализ вакансии, объяснение совпадения профиля, оценку кандидата, заголовок «Сопроводительное письмо», разделители, markdown, JSON, кавычки вокруг письма, текст до или после письма.\n"
+            f"{gender_rule}"
         )
         extended_profile = _get_extended_profile(resume.text)
         resume_prompt = _build_resume_prompt_text(resume.title, resume.text)
@@ -349,19 +420,42 @@ class PromptBuilder:
 class CoverLetterValidator:
     def validate(self, letter: str, resume: ResumeData, analysis: dict, previous_letters: list[str] | None = None, settings: CoverLetterSettings | None = None) -> list[str]:
         errors = []
-        text = (letter or "").strip()
+        text = _clean_model_response(letter)
         lowered = text.casefold()
         if not text:
             errors.append("empty response")
+        if "nonmatch" in lowered and lowered != "nonmatch":
+            errors.append("NONMATCH mixed with other text")
         if re.search(r"(^|\n)\s*#{1,6}\s|```|\*\*|^\s*[-*]\s+", text, flags=re.MULTILINE):
             errors.append("markdown detected")
         if lowered.startswith("{") or lowered.startswith("["):
             errors.append("JSON returned instead of letter")
+        if "—" in text:
+            errors.append("long dash detected")
+        if any(separator in text for separator in ("---", "***", "___")):
+            errors.append("separator detected")
         if any(marker in lowered for marker in ("как модель", "вариант письма", "ниже привед", "комментар")):
             errors.append("technical model comments detected")
+        for marker in SERVICE_ANALYSIS_MARKERS:
+            if marker in lowered:
+                errors.append(f"service analysis detected: {marker}")
         for phrase in FORBIDDEN_PHRASES:
             if phrase in lowered:
                 errors.append(f"forbidden phrase: {phrase}")
+        gender = _normalize_candidate_gender(getattr(resume, "gender", "UNKNOWN"))
+        if gender == "FEMALE" and any(re.search(rf"(?<![а-яё]){re.escape(form)}(?![а-яё])", lowered) for form in MALE_SELF_FORMS):
+            errors.append("male self-form for FEMALE candidate")
+        if gender == "MALE" and any(re.search(rf"(?<![а-яё]){re.escape(form)}(?![а-яё])", lowered) for form in FEMALE_SELF_FORMS):
+            errors.append("female self-form for MALE candidate")
+        if gender == "UNKNOWN" and any(re.search(rf"(?<![а-яё]){re.escape(form)}(?![а-яё])", lowered) for form in MALE_SELF_FORMS + FEMALE_SELF_FORMS):
+            errors.append("gendered self-form for UNKNOWN candidate")
+        telegram = (getattr(resume, "telegram_username", "") or "").strip().lstrip("@")
+        if telegram:
+            mentions = re.findall(rf"@{re.escape(telegram)}(?![A-Za-z0-9_])", text, flags=re.IGNORECASE)
+            if len(mentions) != 1:
+                errors.append("telegram missing or duplicated")
+            if mentions and not re.search(rf"[.!?]\s*Мой\s+тг\s+@{re.escape(telegram)}\.\s*$", text, flags=re.IGNORECASE):
+                errors.append("telegram must be final separate sentence")
         # Technology matching is intentionally advisory. Related stacks are often
         # transferable, and a strict reject here makes good letters fail on word
         # forms or adjacent skills such as Kotlin for a Java resume.
@@ -414,9 +508,17 @@ class CoverLetterGenerationService:
         output_tokens = 0
         analysis = _fallback_analysis(resume, vacancy)
         last_errors: list[str] = []
-        for attempts in range(1, 2):
+        max_attempts = min(max(settings.max_attempts or 1, 1), 2)
+        for attempts in range(1, max_attempts + 1):
             try:
-                system_prompt, user_prompt = self.prompts.letter_prompt(resume, vacancy, analysis, settings)
+                corrective = ""
+                if last_errors:
+                    corrective = (
+                        "Перепиши только сопроводительное письмо. Удали анализ, шаблонные фразы и разделители. "
+                        f"Используй {'женский' if resume.gender == 'FEMALE' else 'мужской' if resume.gender == 'MALE' else 'нейтральный'} род согласно candidateGender. "
+                        "Верни только итоговый текст."
+                    )
+                system_prompt, user_prompt = self.prompts.letter_prompt(resume, vacancy, analysis, settings, corrective)
                 LOGGER.info(
                     "cover_letter_llm single_pass vacancy=%s resume_chars=%s vacancy_chars=%s system_chars=%s user_chars=%s max_tokens=%s",
                     vacancy.id,
@@ -427,7 +529,7 @@ class CoverLetterGenerationService:
                     COVER_LETTER_MAX_TOKENS,
                 )
                 response = await self.llm.generate_text(system_prompt=system_prompt, user_prompt=user_prompt, max_tokens=COVER_LETTER_MAX_TOKENS)
-                letter = response.text
+                letter = _clean_model_response(response.text)
                 input_tokens += int(response.usage.input_tokens or 0)
                 output_tokens += int(response.usage.output_tokens or 0)
                 if letter.strip().casefold() in {"nonmatch", "profile_mismatch"}:
@@ -444,7 +546,11 @@ class CoverLetterGenerationService:
                         input_tokens,
                         output_tokens,
                     )
-                errors = self.validator.validate(letter, resume, analysis, previous_letters, settings)
+                if getattr(resume, "telegram_username", "") and re.search(r"(?:TG|Telegram|тг|телеграм)\s*[:\-–—]?\s*@", letter, flags=re.IGNORECASE):
+                    errors = ["telegram inserted by model"]
+                else:
+                    letter = _ensure_telegram_contact(letter, resume.telegram_username)
+                    errors = self.validator.validate(letter, resume, analysis, previous_letters, settings)
                 if not errors:
                     return CoverLetterResult(
                         analysis,

@@ -12,6 +12,7 @@ class SearchVacancy:
     title: str
     source_search_url: str
     source_page: int
+    search_text: str = ""
 
     def __post_init__(self) -> None:
         if not self.id or not self.id.isdigit():
@@ -120,6 +121,8 @@ class ResumeData:
     title: str
     text: str
     hash: str
+    gender: Literal["MALE", "FEMALE", "UNKNOWN"] = "UNKNOWN"
+    telegram_username: str = ""
 
 
 @dataclass(frozen=True)

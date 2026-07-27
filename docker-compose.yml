@@ -1,12 +1,33 @@
 services:
-  hh-clicker-clean:
-    build: .
+  postgres:
+    image: postgres:16-alpine
     ports:
-      - "127.0.0.1:8001:8001"
-    volumes:
-      - ../hh-clicker-clean-userdata:/app/data
+      - "5432:5432"
+    expose:
+      - "5432"
     environment:
-      HH_CLEAN_DATA_DIR: /app/data
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hh_clicker} -d ${POSTGRES_DB:-hh_clicker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  hh-adapter:
+    build:
+      context: ./hh-adapter
+    expose:
+      - "8000"
+    environment:
+      HH_CLEAN_DATA_DIR: /tmp/hh-adapter-data
+      INTERNAL_API_KEY: ${HH_ADAPTER_API_KEY:?HH_ADAPTER_API_KEY is required}
       LLM_PROVIDER: ${LLM_PROVIDER:-komapi}
       KOMAPI_API_KEY: ${KOMAPI_API_KEY:-}
       KOMAPI_BASE_URL: ${KOMAPI_BASE_URL:-https://www.komapi.top}
@@ -21,8 +42,67 @@ services:
       COVER_LETTER_MAX_RETRIES: ${COVER_LETTER_MAX_RETRIES:-3}
       COVER_LETTER_RETRY_BASE_DELAY_SECONDS: ${COVER_LETTER_RETRY_BASE_DELAY_SECONDS:-1}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2).read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2).read()"]
       interval: 10s
       timeout: 3s
       retries: 6
     restart: unless-stopped
+    networks:
+      - app-net
+
+  backend:
+    build:
+      context: ./backend
+    expose:
+      - "8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:?POSTGRES_USER is required}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET is required}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET is required}
+      JWT_ACCESS_TTL_MINUTES: ${JWT_ACCESS_TTL_MINUTES:-15}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-30}
+      JWT_REFRESH_COOKIE_NAME: ${JWT_REFRESH_COOKIE_NAME:-refreshToken}
+      APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      APP_COOKIE_SAME_SITE: ${APP_COOKIE_SAME_SITE:-Lax}
+      HH_SESSION_ENCRYPTION_KEY: ${HH_SESSION_ENCRYPTION_KEY:?HH_SESSION_ENCRYPTION_KEY is required}
+      FIRST_ADMIN_EMAIL: ${FIRST_ADMIN_EMAIL:-}
+      FIRST_ADMIN_PASSWORD: ${FIRST_ADMIN_PASSWORD:-}
+      HH_ADAPTER_API_KEY: ${HH_ADAPTER_API_KEY:?HH_ADAPTER_API_KEY is required}
+      HH_ADAPTER_URL: http://hh-adapter:8000
+      HH_ADAPTER_CONNECT_TIMEOUT_SECONDS: ${HH_ADAPTER_CONNECT_TIMEOUT_SECONDS:-5}
+      HH_ADAPTER_READ_TIMEOUT_SECONDS: ${HH_ADAPTER_READ_TIMEOUT_SECONDS:-90}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      hh-adapter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    networks:
+      - app-net
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-net
+
+volumes:
+  postgres-data:
+
+networks:
+  app-net:
+    driver: bridge

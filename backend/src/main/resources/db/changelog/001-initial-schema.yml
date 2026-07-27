@@ -1,0 +1,274 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-initial-schema
+      author: codex
+      changes:
+        - createTable:
+            tableName: users
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: email, type: varchar(320), constraints: { nullable: false, unique: true } }
+              - column: { name: password_hash, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: role, type: varchar(32), constraints: { nullable: false } }
+              - column: { name: status, type: varchar(32), constraints: { nullable: false } }
+              - column: { name: cover_letter_generation_enabled, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - createIndex:
+            tableName: users
+            indexName: idx_users_email
+            columns:
+              - column: { name: email }
+
+        - createTable:
+            tableName: refresh_tokens
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: token_hash, type: varchar(128), constraints: { nullable: false, unique: true } }
+              - column: { name: revoked, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: expires_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: refresh_tokens
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_refresh_tokens_user
+
+        - createTable:
+            tableName: hh_accounts
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(160), constraints: { nullable: false } }
+              - column: { name: encrypted_cookies, type: text, constraints: { nullable: false } }
+              - column: { name: encrypted_headers, type: text, constraints: { nullable: false } }
+              - column: { name: hh_host, type: varchar(160), constraints: { nullable: false } }
+              - column: { name: status, type: varchar(32), constraints: { nullable: false } }
+              - column: { name: last_checked_at, type: timestamptz }
+              - column: { name: version, type: bigint, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: hh_accounts
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_hh_accounts_user
+        - createIndex:
+            tableName: hh_accounts
+            indexName: idx_hh_accounts_user_id
+            columns:
+              - column: { name: user_id }
+        - addUniqueConstraint:
+            tableName: hh_accounts
+            columnNames: user_id, name
+            constraintName: uq_hh_accounts_user_name
+
+        - createTable:
+            tableName: resumes
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: hh_account_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: hh_resume_id, type: varchar(96), constraints: { nullable: false } }
+              - column: { name: title, type: varchar(240), constraints: { nullable: false } }
+              - column: { name: text, type: text, constraints: { nullable: false } }
+              - column: { name: candidate_profile, type: text }
+              - column: { name: content_hash, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: active, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: last_synced_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: resumes
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_resumes_user
+        - addForeignKeyConstraint:
+            baseTableName: resumes
+            baseColumnNames: hh_account_id
+            referencedTableName: hh_accounts
+            referencedColumnNames: id
+            constraintName: fk_resumes_hh_account
+        - createIndex:
+            tableName: resumes
+            indexName: idx_resumes_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: resumes
+            indexName: idx_resumes_hh_account_id
+            columns:
+              - column: { name: hh_account_id }
+        - addUniqueConstraint:
+            tableName: resumes
+            columnNames: hh_account_id, hh_resume_id
+            constraintName: uq_resumes_hh_account_resume
+
+        - createTable:
+            tableName: saved_searches
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: hh_account_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: resume_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(200), constraints: { nullable: false } }
+              - column: { name: search_url, type: text, constraints: { nullable: false } }
+              - column: { name: pages, type: integer, constraints: { nullable: false } }
+              - column: { name: include_keywords, type: text }
+              - column: { name: exclude_keywords, type: text }
+              - column: { name: default_cover_letter_mode, type: varchar(32), constraints: { nullable: false } }
+              - column: { name: default_delay_seconds, type: "numeric(8, 2)", constraints: { nullable: false } }
+              - column: { name: default_max_applications, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: active, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: saved_searches
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_saved_searches_user
+        - createIndex:
+            tableName: saved_searches
+            indexName: idx_saved_searches_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: saved_searches
+            indexName: idx_saved_searches_hh_account_id
+            columns:
+              - column: { name: hh_account_id }
+
+        - createTable:
+            tableName: campaigns
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: hh_account_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: resume_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: saved_search_id, type: uuid }
+              - column: { name: name, type: varchar(220), constraints: { nullable: false } }
+              - column: { name: search_url, type: text, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: cover_letter_mode, type: varchar(32), constraints: { nullable: false } }
+              - column: { name: delay_seconds, type: "numeric(8, 2)", constraints: { nullable: false } }
+              - column: { name: max_applications, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: stop_requested, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: total_vacancies, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: generated_count, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: applied_count, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: already_count, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: skipped_count, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: failed_count, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: version, type: bigint, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: started_at, type: timestamptz }
+              - column: { name: finished_at, type: timestamptz }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: campaigns
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedColumnNames: id
+            constraintName: fk_campaigns_user
+        - createIndex:
+            tableName: campaigns
+            indexName: idx_campaigns_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: campaigns
+            indexName: idx_campaigns_hh_account_id
+            columns:
+              - column: { name: hh_account_id }
+        - createIndex:
+            tableName: campaigns
+            indexName: idx_campaigns_status
+            columns:
+              - column: { name: status }
+
+        - createTable:
+            tableName: campaign_vacancies
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: campaign_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: hh_vacancy_id, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: title, type: varchar(320), constraints: { nullable: false } }
+              - column: { name: company_name, type: varchar(240) }
+              - column: { name: vacancy_url, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: description_hash, type: varchar(64) }
+              - column: { name: source_page, type: integer, constraints: { nullable: false } }
+              - column: { name: selected, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: match_analysis, type: jsonb }
+              - column: { name: cover_letter, type: text }
+              - column: { name: cover_letter_status, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: cover_letter_edited_manually, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: generation_provider, type: varchar(64) }
+              - column: { name: generation_model, type: varchar(120) }
+              - column: { name: prompt_version, type: varchar(64) }
+              - column: { name: input_tokens, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: output_tokens, type: integer, defaultValueNumeric: 0, constraints: { nullable: false } }
+              - column: { name: generation_error, type: text }
+              - column: { name: apply_status, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: apply_error_code, type: varchar(80) }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: campaign_vacancies
+            baseColumnNames: campaign_id
+            referencedTableName: campaigns
+            referencedColumnNames: id
+            constraintName: fk_campaign_vacancies_campaign
+        - addUniqueConstraint:
+            tableName: campaign_vacancies
+            columnNames: campaign_id, hh_vacancy_id
+            constraintName: uq_campaign_vacancies_campaign_hh_id
+        - createIndex:
+            tableName: campaign_vacancies
+            indexName: idx_campaign_vacancies_campaign_id
+            columns:
+              - column: { name: campaign_id }
+        - createIndex:
+            tableName: campaign_vacancies
+            indexName: idx_campaign_vacancies_hh_vacancy_id
+            columns:
+              - column: { name: hh_vacancy_id }
+
+        - createTable:
+            tableName: application_attempts
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: campaign_vacancy_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: attempt_number, type: integer, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(40), constraints: { nullable: false } }
+              - column: { name: http_status, type: integer }
+              - column: { name: error_code, type: varchar(80) }
+              - column: { name: safe_error_message, type: text }
+              - column: { name: topic_id, type: varchar(120) }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+        - addForeignKeyConstraint:
+            baseTableName: application_attempts
+            baseColumnNames: campaign_vacancy_id
+            referencedTableName: campaign_vacancies
+            referencedColumnNames: id
+            constraintName: fk_application_attempts_campaign_vacancy
+        - createIndex:
+            tableName: application_attempts
+            indexName: idx_application_attempts_campaign_vacancy_id
+            columns:
+              - column: { name: campaign_vacancy_id }
+
+        - createTable:
+            tableName: audit_events
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: user_id, type: uuid }
+              - column: { name: event_type, type: varchar(80), constraints: { nullable: false } }
+              - column: { name: details, type: jsonb }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }

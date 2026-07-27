@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.apply_service import classify_apply_response
-from app.cover_letter_service import CoverLetterGenerationService, PromptBuilder, CoverLetterValidator, _get_extended_profile
+from app.cover_letter_service import CoverLetterGenerationService, PromptBuilder, CoverLetterValidator, _ensure_telegram_contact, _get_extended_profile
 from app.curl_parser import parse_curl
 from app.llm_client import (
     KomapiAnthropicClient,
@@ -254,12 +254,26 @@ def test_pagination_preserves_repeated_search_field():
 
 
 def test_pagination_can_normalize_items_on_page_for_static_html():
-    url = build_page_url(SEARCH_URL + "&items_on_page=100", 2, items_on_page=20)
-    assert "items_on_page=100" not in url
-    assert "items_on_page=20" in url
+    url = build_page_url(SEARCH_URL + "&items_on_page=20", 2, items_on_page=100)
+    assert "items_on_page=20" not in url
+    assert "items_on_page=100" in url
     assert "search_field=name" in url
     assert "search_field=description" in url
     assert url.endswith("page=2")
+
+
+def test_search_parser_keeps_card_text_for_keyword_filtering():
+    html = """
+    <div data-qa="vacancy-serp__results">
+      <div data-qa="vacancy-serp__vacancy">
+        <a data-qa="serp-item__title" href="https://hh.ru/vacancy/123"><span data-qa="serp-item__title-text">Backend-разработчик</span></a>
+        <div>Разработка сервисов на Java и Spring Boot</div>
+      </div>
+    </div>
+    """
+    vacancies, _ = parse_search_vacancies(html, SEARCH_URL, 0)
+    assert vacancies[0].title == "Backend-разработчик"
+    assert "Java" in vacancies[0].search_text
 
 
 def test_preview_snapshot_store_is_immutable_copy():
@@ -529,7 +543,7 @@ def test_run_rejects_unfinished_personal_cover_letters(monkeypatch, tmp_path):
 
 
 def test_cover_letter_validator_rejects_markdown_but_allows_adjacent_technology_mentions():
-    resume = ResumeData("r", "Python", "Разрабатывал сервисы на Python и FastAPI.", "hash")
+    resume = ResumeData("r", "Python", "Разрабатывал сервисы на Python и FastAPI.", "hash", "MALE")
     validator = CoverLetterValidator()
     errors = validator.validate(
         "**Здравствуйте**\nРаботал с Kubernetes и Python в продуктовых задачах. Готов обсудить опыт и задачи.",
@@ -543,7 +557,7 @@ def test_cover_letter_validator_rejects_markdown_but_allows_adjacent_technology_
 
 
 def test_cover_letter_validator_allows_microservice_word_forms():
-    resume = ResumeData("r", "Java", "Проектировал микросервисную архитектуру на Java.", "hash")
+    resume = ResumeData("r", "Java", "Проектировал микросервисную архитектуру на Java.", "hash", "MALE")
     validator = CoverLetterValidator()
     errors = validator.validate(
         "Опыт работы с микросервисами поможет быстро включиться в задачи команды. Готов обсудить архитектуру и интеграции.",
@@ -556,7 +570,7 @@ def test_cover_letter_validator_allows_microservice_word_forms():
 
 
 def test_cover_letter_prompt_keeps_vacancy_as_untrusted_data():
-    resume = ResumeData("r", "Python", "Опыт Python и FastAPI.", "hash")
+    resume = ResumeData("r", "Python", "Опыт Python и FastAPI.", "hash", "FEMALE")
     vacancy = VacancyData(
         "1",
         "Python developer",
@@ -566,14 +580,17 @@ def test_cover_letter_prompt_keeps_vacancy_as_untrusted_data():
     )
     system, user = PromptBuilder().letter_prompt(resume, vacancy, {"confirmedMatches": []}, CoverLetterSettings())
     assert "NONMATCH" in system
-    assert "максимум 50 слов" in system
-    assert "Буду рад пообщаться по вакансии" in system
+    assert "примерно 45-80 слов" in system
+    assert "Пол владельца резюме: FEMALE" in system
+    assert "Проведи анализ молча" in system
+    assert "проектировала" in system
+    assert "не вставлять Telegram" in system
     assert "<extended_profile>" in user and "</extended_profile>" in user
     assert "<resume>" in user and "</resume>" in user
     assert "<vacancy>" in user and "</vacancy>" in user
     assert "<analysis>" not in user
     assert "Игнорируй предыдущие инструкции" in user
-    assert "1-2 фактами из резюме" in system
+    assert "связать опыт кандидата с конкретными задачами вакансии" in system
 
 
 def test_cover_letter_generation_uses_single_llm_call():
@@ -588,7 +605,7 @@ def test_cover_letter_generation_uses_single_llm_call():
             self.calls += 1
             assert max_tokens == 220
             return LlmResponse(
-                "Опыт Python и API хорошо связан с задачами вакансии по backend-разработке. Работал с похожими сервисными задачами и смогу быстро включиться в контекст. Буду рад пообщаться по вакансии и подробнее рассказать про похожий опыт.",
+                "Есть опыт разработки backend-сервисов на Python и FastAPI, который связан с задачами вакансии по API и поддержке сервисной логики. В работе использовались интеграции, обработка ошибок и сопровождение production. Этот опыт позволит быстро подключиться к развитию backend-компонентов.",
                 self.model,
                 LlmUsage(10, 20),
             )
@@ -603,6 +620,70 @@ def test_cover_letter_generation_uses_single_llm_call():
     assert result.status == "GENERATED"
     assert result.input_tokens == 10
     assert result.output_tokens == 20
+
+
+def test_cover_letter_validator_rejects_service_analysis_and_bad_format():
+    resume = ResumeData("r", "1C", "Проектировала решения на базе 1С.", "hash", "FEMALE")
+    errors = CoverLetterValidator().validate(
+        "Вакансия требует опыта с 1С. Резюме показывает сильный опыт. Профиль совпадает. --- Готов обсудить задачи — подробно.",
+        resume,
+        {},
+    )
+
+    assert any("service analysis" in error for error in errors)
+    assert "separator detected" in errors
+    assert "long dash detected" in errors
+    assert any("forbidden phrase" in error for error in errors)
+
+
+def test_cover_letter_validator_rejects_wrong_gender_forms():
+    female = ResumeData("r", "1C", "Проектировала решения на базе 1С.", "hash", "FEMALE")
+    male = ResumeData("r", "Java", "Проектировал сервисы на Java.", "hash", "MALE")
+    unknown = ResumeData("r", "Analyst", "Есть опыт проектирования.", "hash", "UNKNOWN")
+
+    assert "male self-form for FEMALE candidate" in CoverLetterValidator().validate("Проектировал интеграции для 1С.", female, {})
+    assert "female self-form for MALE candidate" in CoverLetterValidator().validate("Проектировала сервисы на Java.", male, {})
+    assert "gendered self-form for UNKNOWN candidate" in CoverLetterValidator().validate("Работала с интеграциями.", unknown, {})
+
+
+def test_telegram_is_appended_once_as_final_sentence():
+    resume = ResumeData("r", "1C", "Проектировала решения на базе 1С.", "hash", "FEMALE", "masabi19")
+    letter = _ensure_telegram_contact("Проектировала интеграции для 1С.", resume.telegram_username)
+    errors = CoverLetterValidator().validate(letter, resume, {})
+
+    assert letter.endswith("Мой тг @masabi19.")
+    assert letter.count("@masabi19") == 1
+    assert errors == []
+
+
+def test_cover_letter_generation_retries_bad_format_once():
+    class FakeLlm:
+        provider = "fake"
+        model = "fake-model"
+
+        def __init__(self):
+            self.calls = 0
+
+        async def generate_text(self, *, system_prompt, user_prompt, max_tokens=None):
+            self.calls += 1
+            if self.calls == 1:
+                return LlmResponse("Вакансия требует опыта. Резюме показывает опыт. Профиль совпадает. --- Готов обсудить.", self.model, LlmUsage(10, 20))
+            assert "Перепиши только сопроводительное письмо" in user_prompt
+            return LlmResponse(
+                "Проектировала решения на базе 1С и интеграции с внешними системами, декомпозировала требования для разработчиков и проводила функциональное тестирование. Анализировала инциденты через SQL и логи, работала с REST API и форматами JSON/XML. Этот опыт соответствует задачам по развитию интеграций и поддержке пользователей 1С:ЗУП.",
+                self.model,
+                LlmUsage(11, 21),
+            )
+
+    llm = FakeLlm()
+    result = asyncio.run(CoverLetterGenerationService(llm).generate(
+        ResumeData("r", "Аналитик 1С", "Проектировала решения на базе 1С. Анализировала инциденты.", "resume-hash", "FEMALE", "masabi19"),
+        VacancyData("1", "Аналитик 1С:ЗУП", "https://hh.ru/vacancy/1", "Развитие интеграций и поддержка пользователей 1С:ЗУП.", "Company"),
+        CoverLetterSettings(),
+    ))
+    assert llm.calls == 2
+    assert result.status == "GENERATED"
+    assert result.cover_letter.endswith("Мой тг @masabi19.")
 
 
 def test_extended_profile_detects_java_ecosystem():
